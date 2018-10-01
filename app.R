@@ -95,7 +95,8 @@ server <- function(input, output, session) { # need session for interactive stuf
   
   
   
-  # ---------------------------STUFF FOR THE CONTINUOUSLY UPDATING PLOT
+  # ---------------------------STUFF FOR THE CONTINUOUSLY UPDATING PLOT 
+  # (Borrowing from Mike Wise's response https://stackoverflow.com/questions/41438725/update-dynamically-created-plot-in-r-shiny?answertab=votes#tab-top )
   rv <- reactiveValues(x=rnorm(1),run=FALSE) # create reactive variables
   
   autoInvalidate <- reactiveTimer(intervalMs=500,session) # set an autoinvalidate timer
@@ -132,7 +133,6 @@ server <- function(input, output, session) { # need session for interactive stuf
         collapsible = FALSE, collapsed = FALSE)
     )
   }) # END RENDERUI
-  
   #----------------------------------------END CONTINUOUS PLOT
   
   
