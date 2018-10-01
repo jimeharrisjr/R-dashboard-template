@@ -85,7 +85,8 @@ server <- function(input, output, session) { # need session for interactive stuf
     
     # now create the UI - with "data" output
     box(dataTableOutput('data') # add box details
-        ,title = NULL, footer = NULL, status = NULL,
+        ,title = NULL, footer = NULL, 
+        status = NULL,  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
         solidHeader = FALSE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE)
   }) # end data table UI
@@ -109,14 +110,23 @@ server <- function(input, output, session) { # need session for interactive stuf
       htit <- sprintf("Hist of %d rnorms",length(rv$x))
       hist(rv$x,col = "steelblue",main=htit,breaks=12)
     })
-    box(actionButton("gogobutt","Go"),
+    output$valuePlot <-renderPlot({
+      plot(x=1:length(rv$x), y=rv$x,col = 'steelblue',main='Chaotic Neutral', type = 'b', pch=19)
+    })
+    fluidRow( # create two plots in a fluid row
+      box(actionButton("gogobutt","Go"), # Put a histogram in one
         actionButton("stopbutt","Stop"),
         actionButton("resetbutt","Reset"),
         plotOutput("histplot"), # Set Box Details
         title = NULL, footer = NULL, status = NULL,
         solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+        collapsible = FALSE, collapsed = FALSE),
+    box(plotOutput('valuePlot'), # put another plot in the other
+        title = "Some Random Plot", footer = NULL, 
+        status = NULL, # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+        solidHeader = TRUE, background = 'black', width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE)
-    
+    )
   }) # END RENDERUI
   
   #----------------------------------------END CONTINUOUS PLOT
