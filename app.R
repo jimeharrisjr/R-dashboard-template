@@ -9,7 +9,7 @@ library(data.table)
 library(jsonlite)
 library(ggplot2)
 
-ui <- dashboardPage(title='Template',skin='blue',
+ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab title, skin default is blue, but there are also black, purple, green, red, and yellow. 
                     dashboardHeader(title=tags$a(href='https://www.google.com',tags$script(src = "message-handler.js"),
                                                    tags$img(src='Batman-PNG-Transparent.png', height='45px'))),
                     dashboardSidebar(sidebarMenu(
@@ -49,7 +49,7 @@ ui <- dashboardPage(title='Template',skin='blue',
                                   # Boxes need to be put in a row (or column)
                                   tabItems(
                                     tabItem(tabName = 'dashboard',uiOutput('dtable'),width = 12),#end tab 1
-                                    tabItem(tabName = 'second', uiOutput('second'), width=12),#end tab 2
+                                    tabItem(tabName = 'second', uiOutput('continuousPlot'), width=12),#end tab 2
                                     tabItem(tabName = 'third', uiOutput('third')),#end tab 3
                                     tabItem(tabName = 'fourth',uiOutput('fourth')),#end tab 4
                                     tabItem(tabName = 'fifth', uiOutput('fifth')) # end tab 5
@@ -57,8 +57,12 @@ ui <- dashboardPage(title='Template',skin='blue',
                     ) # end Dashboard body
                     ) # end UI
 
-# Define server logic required to draw a histogram
-server <- function(input, output) {
+
+
+
+# SERVER STUFF IS NEXT
+
+server <- function(input, output, session) { # need session for interactive stuff
   
   v <- reactiveValues(murderMean = NULL, assaultMean=NULL, rapeMean=NULL) # Reactive Values can be read and written to by any function
   
@@ -84,8 +88,41 @@ server <- function(input, output) {
         ,title = NULL, footer = NULL, status = NULL,
         solidHeader = FALSE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE)
+  }) # end data table UI
+  
+  
+  # ---------------------------STUFF FOR THE CONTINUOUSLY UPDATING PLOT
+  rv <- reactiveValues(x=rnorm(1),run=FALSE) # create reactive variables
+  
+  autoInvalidate <- reactiveTimer(intervalMs=500,session) # set an autoinvalidate timer
+  
+  observe({
+    autoInvalidate()
+    isolate({ if (rv$run) { rv$x <- c(rv$x,rnorm(1)) } })
   })
-}
+  observeEvent(input$gogobutt, { isolate({ rv$run=TRUE      }) })
+  observeEvent(input$stopbutt, { isolate({ rv$run=FALSE      }) })
+  observeEvent(input$resetbutt,{ isolate({ rv$x=rnorm(1) }) })
+  #render the UI with the plot and call the UI comntinuousPlot
+  output$continuousPlot<-renderUI({
+    output$histplot <- renderPlot({
+      htit <- sprintf("Hist of %d rnorms",length(rv$x))
+      hist(rv$x,col = "steelblue",main=htit,breaks=12)
+    })
+    box(actionButton("gogobutt","Go"),
+        actionButton("stopbutt","Stop"),
+        actionButton("resetbutt","Reset"),
+        plotOutput("histplot"), # Set Box Details
+        title = NULL, footer = NULL, status = NULL,
+        solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+        collapsible = FALSE, collapsed = FALSE)
+    
+  }) # END RENDERUI
+  
+  #----------------------------------------END CONTINUOUS PLOT
+  
+  
+} # END SERVER
 
 # Run the application 
 shinyApp(ui = ui, server = server)
