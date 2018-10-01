@@ -100,23 +100,26 @@ server <- function(input, output, session) { # need session for interactive stuf
   rv <- reactiveValues(x=rnorm(1),run=FALSE) # create reactive variables
   
   autoInvalidate <- reactiveTimer(intervalMs=500,session) # set an autoinvalidate timer
-  
+  # trigger the reactive function with the timer
   observe({
     autoInvalidate()
     isolate({ if (rv$run) { rv$x <- c(rv$x,rnorm(1)) } })
   })
+  # observe the buttons and either start, stop, or reset the plots
   observeEvent(input$gogobutt, { isolate({ rv$run=TRUE      }) })
   observeEvent(input$stopbutt, { isolate({ rv$run=FALSE      }) })
   observeEvent(input$resetbutt,{ isolate({ rv$x=rnorm(1) }) })
+  
   #render the UI with the plot and call the UI comntinuousPlot
-  output$continuousPlot<-renderUI({
-    output$histplot <- renderPlot({
+  output$continuousPlot<-renderUI({# output the UI generated below into the reactive object "continuousPlot"
+    output$histplot <- renderPlot({ # create reactive plot in output 
       htit <- sprintf("Hist of %d rnorms",length(rv$x))
       hist(rv$x,col = "steelblue",main=htit,breaks=12)
     })
-    output$valuePlot <-renderPlot({
+    output$valuePlot <-renderPlot({ # create a second reactive plot
       plot(x=1:length(rv$x), y=rv$x,col = 'steelblue',main='Chaotic Neutral', type = 'b', pch=19)
     })
+    # The below will create (render) the dynamic UI
     fluidRow( # create two plots in a fluid row
       box(actionButton("gogobutt","Go"), # Put a histogram in one
         actionButton("stopbutt","Stop"),
@@ -125,7 +128,7 @@ server <- function(input, output, session) { # need session for interactive stuf
         title = NULL, footer = NULL, status = NULL,
         solidHeader = FALSE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE),
-      
+    # create a second box with a different plot  
     box(plotOutput('valuePlot'), # put another plot in the other
         title = "Some Random Plot", footer = NULL, 
         status = 'info', # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
