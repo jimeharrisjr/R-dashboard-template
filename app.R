@@ -67,6 +67,7 @@ server <- function(input, output, session) { # need session for interactive stuf
   v <- reactiveValues(murderMean = NULL, assaultMean=NULL, rapeMean=NULL) # Reactive Values can be read and written to by any function
   
   
+  #----------------------------------------------STUFF FOR A DATA TABLE----------
   output$dtable<-renderUI({ # make a data table dynamically
     #use the USA arrests data for the data table and grab some means
     data("USArrests")
@@ -90,6 +91,8 @@ server <- function(input, output, session) { # need session for interactive stuf
         solidHeader = FALSE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE)
   }) # end data table UI
+  #----------------------------END DATA TABLE STUFF---------------------------
+  
   
   
   # ---------------------------STUFF FOR THE CONTINUOUSLY UPDATING PLOT
@@ -121,10 +124,11 @@ server <- function(input, output, session) { # need session for interactive stuf
         title = NULL, footer = NULL, status = NULL,
         solidHeader = FALSE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE),
+      
     box(plotOutput('valuePlot'), # put another plot in the other
         title = "Some Random Plot", footer = NULL, 
-        status = NULL, # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
-        solidHeader = TRUE, background = 'black', width = 6, height = NULL,
+        status = 'info', # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+        solidHeader = TRUE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE)
     )
   }) # END RENDERUI
