@@ -3,15 +3,19 @@ library(shiny)
 library(shinyFiles)
 library(shinydashboard)
 library(shinyWidgets)
-# Comon packages I use
+# Common packages I use
 library(dplyr)
 library(data.table)
 library(jsonlite)
 library(ggplot2)
+library(ggmap)
+library(maps)
+library(mapdata)
 
 ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab title, skin default is blue, but there are also black, purple, green, red, and yellow. 
                     dashboardHeader(title=tags$a(href='https://www.google.com',tags$script(src = "message-handler.js"),
                                                    tags$img(src='Batman-PNG-Transparent.png', height='45px'))),
+                    # The Side Bar buts the menu on the left, and creates the spaces and links for the tabsNames
                     dashboardSidebar(sidebarMenu(
                       menuItem('Dashboard', tabName = "dashboard", icon = icon("dashboard")),
                       menuItem('Second', tabName = "second", icon = icon("tablet")),
@@ -19,6 +23,7 @@ ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab titl
                       menuItem('Fourth', tabName = "fourth", icon = icon("bar-chart-o")),
                       menuItem('Fifth', tabName = "fifth", icon = icon("cog"))
                     ),width = '150px'),
+                    # add some HTML tags, etc next, if desired
                     dashboardBody(tags$head(tags$style(HTML(".btn-styled {
                                                             border: 0;
                                                             line-height: 2.5;
@@ -46,12 +51,12 @@ ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab titl
                                                             inset 2px 2px 3px rgba(0, 0, 0, .6);
                                                             }
                                                             ")),tags$script(src = "message-handler.js")),
-                                  # Boxes need to be put in a row (or column)
+                                  # Define your tab items - in this case, each tab calls out a custom UI rendered in the Server
                                   tabItems(
                                     tabItem(tabName = 'dashboard',uiOutput('dtable'),width = 12),#end tab 1
                                     tabItem(tabName = 'second', uiOutput('continuousPlot'), width=12),#end tab 2
-                                    tabItem(tabName = 'third', uiOutput('third')),#end tab 3
-                                    tabItem(tabName = 'fourth',uiOutput('fourth')),#end tab 4
+                                    tabItem(tabName = 'third', uiOutput('infoBoxes')),#end tab 3
+                                    tabItem(tabName = 'fourth',uiOutput('selections'),uiOutput('heatMap')),#end tab 4
                                     tabItem(tabName = 'fifth', uiOutput('fifth')) # end tab 5
                                   )#endtabs
                     ) # end Dashboard body
@@ -74,8 +79,9 @@ server <- function(input, output, session) { # need session for interactive stuf
     dt<-USArrests
     means<-apply(dt[2:5,],2,mean)
     dt<-cbind(row.names(dt),dt)
-    colnames(dt)[1]<-'State'
-
+    colnames(dt)[1]<-'region'
+    v$df<-dt
+    #row.names(v$df)<-NULL
     # set some reactive values for other functions
     v$murderMean<-means[1]
     v$assaultMean<-means[2]
@@ -137,6 +143,74 @@ server <- function(input, output, session) { # need session for interactive stuf
     )
   }) # END RENDERUI
   #----------------------------------------END CONTINUOUS PLOT
+  
+  
+  
+  #----------------------------------------MAKE SOME INFO BOXES----------------
+  output$infoBoxes<-renderUI({ # output a UI called infoBoxes
+    output$murderBox <- renderInfoBox({# make this an infobox with a refular icon
+      infoBox(
+        "Murder Mean", v$murderMean, icon = icon("list"),
+        color = "purple"
+      )
+    })
+    output$assaultBox <- renderInfoBox({# an infobox with a glyficon
+      infoBox(
+        "Assault Mean", v$assaultMean, icon = icon("wrench", lib = "glyphicon"), # Glyphicons are only those listed here: https://getbootstrap.com/docs/3.3/components/
+        color = "yellow"
+      )
+    })
+    output$rapeBox <- renderValueBox({ #a valueBox instead of an infobox
+      valueBox(
+        v$rapeMean, "Rape Mean", icon = icon("alert", lib = "glyphicon"), # Glyphicons are only those listed here: https://getbootstrap.com/docs/3.3/components/
+        color = "red"
+      )
+    })
+    # output a box with the info/value boxes inside
+    box(infoBoxOutput('murderBox', width = 3), infoBoxOutput('assaultBox', width = 3),valueBoxOutput('rapeBox', width = 3), width = 12)
+    
+  })
+  #----------------------------------------END INFO BOXES-------
+  
+  #----------------------------------------BEGIN MAP--------------
+  output$selections<-renderUI({
+    choices<-colnames(v$df)[c(2,3,5)]
+    fluidRow(
+      box(selectInput("select", "Select column to display",choices = choices),
+        title = NULL, footer = NULL, 
+        status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+        solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+        collapsible = FALSE, collapsed = FALSE)
+      )
+    
+  })
+  output$heatMap<-renderUI({
+    dt<-as.data.table(v$df)
+    dt$region<-tolower(dt$region)
+    states <- as.data.table(map_data("state"))
+    
+    map.df <-merge(states,dt,key='region')
+    map.df <- map.df[order(map.df$order),]
+    map.df$Count<-map.df[,input$select, with=FALSE]
+    
+    if (!is.null(df$Count[1])){
+      output$map<-renderPlot({
+        
+        ggplot(map.df, aes(x=long,y=lat,group=group))+
+          ggtitle(paste(input$select,'by State')) +
+          geom_polygon(aes(fill=Count))+
+          geom_path()+ 
+          scale_fill_gradientn(colours=rev(heat.colors(10)),na.value="grey90")+
+          coord_map() +
+          theme(plot.title = element_text(color="red", size=32,hjust=.5, face="bold.italic"))
+      })
+    }
+    
+    box(plotOutput('map'))
+   
+  })
+  
+  #----------------------------------------END MAP----------------
   
   
 } # END SERVER
