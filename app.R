@@ -173,40 +173,44 @@ server <- function(input, output, session) { # need session for interactive stuf
   #----------------------------------------END INFO BOXES-------
   
   #----------------------------------------BEGIN MAP--------------
+  # Create a section list and output it as a control
   output$selections<-renderUI({
-    choices<-colnames(v$df)[c(2,3,5)]
+    choices<-colnames(v$df)[c(2,3,5)] # dynamically assign the selections
     fluidRow(
       box(selectInput("select", "Select column to display",choices = choices),
-        title = NULL, footer = NULL, 
-        status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
-        solidHeader = FALSE, background = NULL, width = 6, height = NULL,
-        collapsible = FALSE, collapsed = FALSE)
-      )
+          title = NULL, footer = NULL, 
+          status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+          solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+          collapsible = FALSE, collapsed = FALSE)
+    )
     
   })
+  # render a heatmap based on a selection in the control panel
   output$heatMap<-renderUI({
+    
     dt<-as.data.table(v$df)
     dt$region<-tolower(dt$region)
-    states <- as.data.table(map_data("state"))
+    states <- as.data.table(map_data("state")) # get the map data for states
     
     map.df <-merge(states,dt,key='region')
     map.df <- map.df[order(map.df$order),]
-    map.df$Count<-map.df[,input$select, with=FALSE]
-    
-    if (!is.null(df$Count[1])){
-      output$map<-renderPlot({
-        
-        ggplot(map.df, aes(x=long,y=lat,group=group))+
-          ggtitle(paste(input$select,'by State')) +
-          geom_polygon(aes(fill=Count))+
-          geom_path()+ 
-          scale_fill_gradientn(colours=rev(heat.colors(10)),na.value="grey90")+
-          coord_map() +
-          theme(plot.title = element_text(color="red", size=32,hjust=.5, face="bold.italic"))
-      })
+    map.df[,Count:=group] # set an initial value for Count to avoid a warning
+    if (!is.null(input$select)){ #avoid warnings by making sure the input has been recorded before setting the values of the column
+      map.df$Count<-map.df[,input$select, with=FALSE]
     }
-    
+    output$map<-renderPlot({ # map a heatmap 
+      ggplot(map.df, aes(x=long,y=lat,group=group))+
+        ggtitle(paste(input$select,'by State')) +
+        geom_polygon(aes(fill=Count))+
+        geom_path()+ 
+        scale_fill_gradientn(colours=rev(heat.colors(10)),na.value="grey90")+
+        coord_map() +
+        theme(plot.title = element_text(color="red", size=32,hjust=.5, face="bold.italic"))
+      
+    })
+    fluidRow(
     box(plotOutput('map'))
+    )
    
   })
   
