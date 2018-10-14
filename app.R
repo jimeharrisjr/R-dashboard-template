@@ -57,7 +57,7 @@ ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab titl
                                     tabItem(tabName = 'second', uiOutput('continuousPlot'), width=12),#end tab 2
                                     tabItem(tabName = 'third', uiOutput('infoBoxes')),#end tab 3
                                     tabItem(tabName = 'fourth',uiOutput('selections'),uiOutput('heatMap')),#end tab 4
-                                    tabItem(tabName = 'fifth', uiOutput('fifth')) # end tab 5
+                                    tabItem(tabName = 'fifth' ,uiOutput('filter') ) # end tab 5
                                   )#endtabs
                     ) # end Dashboard body
                     ) # end UI
@@ -69,12 +69,12 @@ ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab titl
 
 server <- function(input, output, session) { # need session for interactive stuff
   
-  v <- reactiveValues(murderMean = NULL, assaultMean=NULL, rapeMean=NULL) # Reactive Values can be read and written to by any function
+  v <- reactiveValues(murderMean = NULL, assaultMean=NULL, rapeMean=NULL, mapData=NULL) # Reactive Values can be read and written to by any function
   
   
   #----------------------------------------------STUFF FOR A DATA TABLE----------
   output$dtable<-renderUI({ # make a data table dynamically
-    #use the USA arrests data for the data table and grab some means
+    #use the USA arrests data for the data table and calculate some means
     data("USArrests")
     dt<-USArrests
     means<-apply(dt[2:5,],2,mean)
@@ -167,7 +167,11 @@ server <- function(input, output, session) { # need session for interactive stuf
       )
     })
     # output a box with the info/value boxes inside
-    box(infoBoxOutput('murderBox', width = 3), infoBoxOutput('assaultBox', width = 3),valueBoxOutput('rapeBox', width = 3), width = 12)
+    box(infoBoxOutput('murderBox', width = 3), infoBoxOutput('assaultBox', width = 3),valueBoxOutput('rapeBox', width = 3),
+        title = "Some Average Values", footer = "Two InfoBoxes and a ValueBox" , 
+        status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+        solidHeader = FALSE, background = NULL, width = 12, height = NULL,
+        collapsible = FALSE, collapsed = FALSE)
     
   })
   #----------------------------------------END INFO BOXES-------
@@ -177,7 +181,7 @@ server <- function(input, output, session) { # need session for interactive stuf
   output$selections<-renderUI({
     choices<-colnames(v$df)[c(2,3,5)] # dynamically assign the selections
     fluidRow(
-      box(selectInput("select", "Select column to display",choices = choices),
+      box(selectInput("select", "Select crime to display",choices = choices),
           title = NULL, footer = NULL, 
           status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
           solidHeader = FALSE, background = NULL, width = 6, height = NULL,
@@ -198,14 +202,16 @@ server <- function(input, output, session) { # need session for interactive stuf
     if (!is.null(input$select)){ #avoid warnings by making sure the input has been recorded before setting the values of the column
       map.df$Count<-map.df[,input$select, with=FALSE]
     }
+    v$mapData<-as.data.table(dplyr::select(map.df,-Count))
+    
     output$map<-renderPlot({ # map a heatmap 
       ggplot(map.df, aes(x=long,y=lat,group=group))+
         ggtitle(paste(input$select,'by State')) +
         geom_polygon(aes(fill=Count))+
         geom_path()+ 
-        scale_fill_gradientn(colours=rev(heat.colors(10)),na.value="grey90")+
+        scale_fill_gradientn(colours=rev(heat.colors(100)),na.value="grey90")+
         coord_map() +
-        theme(plot.title = element_text(color="red", size=32,hjust=.5, face="bold.italic"))
+        theme(plot.title = element_text(color="red", size=32,hjust=.5,face="bold.italic"))
       
     })
     fluidRow(
@@ -216,7 +222,67 @@ server <- function(input, output, session) { # need session for interactive stuf
   
   #----------------------------------------END MAP----------------
   
-  
+  #----------------------------------------BEGIN FILTERS--------------
+  output$filter<-renderUI({
+    if(is.null(v$mapData)){ # if the data hasn't been placed in a reactive variable yet, pop a message and tell them
+      session$sendCustomMessage(type='testmessage',message='You must visit tab four before coming here')
+      
+    }
+    else({ # otherwise, render the page
+      cn<-colnames(v$mapData)
+      long<-round(range(v$mapData$long))
+      lat<-round(range(v$mapData$lat))
+      murderRange<-range(v$mapData$Murder)
+      assaultRange<-range(v$mapData$Assault)
+      rapeRange<-range(v$mapData$Rape)
+      popRange<-range(v$mapData$UrbanPop)
+      
+      
+      #& Assault %in% input$assaultRate & Rape %in% input$rapeRate & UrbanPop %in% input$popRate
+     
+      fluidPage(
+        fluidRow(
+          box(checkboxGroupInput('selectColumns',"Select Columns to Display", choices=cn, selected = cn ,inline=TRUE),
+                     title = NULL, footer = NULL, 
+                     status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+                     solidHeader = FALSE, background = NULL, width = 12, height = NULL,
+                     collapsible = FALSE, collapsed = FALSE
+                     ) # end Box
+                 ), # end Row
+        fluidRow(
+          box(
+          sliderInput('longitude',"Longitude Range",min = long[1], max = long[2], value = (long)),
+          sliderInput('lattitude',"Lattitude Range",min = lat[1], max = lat[2], value = (lat)),
+          sliderInput('murderRate',"Murder Rate Range",min = murderRange[1], max = murderRange[2], value = (murderRange)),
+          sliderInput('assaultRate',"Assault Rate Range",min = assaultRange[1], max = assaultRange[2], value = (assaultRange)),
+          sliderInput('rapeRate',"Rape Rate Range",min = rapeRange[1], max = rapeRange[2], value = (rapeRange)),
+          sliderInput('popRate',"Urban Population Range",min = popRange[1], max = popRange[2], value = (popRange)),
+          title = NULL, footer = NULL, 
+          status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+          solidHeader = FALSE, background = NULL, width = 4, height = NULL,
+          collapsible = FALSE, collapsed = FALSE
+        )# end Box
+        ,uiOutput('filterData')
+        )# end Row
+        
+      ) # end Page
+    })
+    
+  })
+  output$filterData<-renderUI({
+    
+    mdf<-v$mapData[Murder>=input$murderRate[1] & Murder <=input$murderRate[2] & Assault>=input$assaultRate[1] & Assault <=input$assaultRate[2] & Rape>=input$rapeRate[1] & Rape <=input$rapeRate[2] & UrbanPop>=input$popRate[1] & UrbanPop <=input$popRate[2] ]
+    mdf[,avgLong:=mean(long), by=region]
+    mdf[,avgLat:=mean(lat), by=region]
+    mdf<-mdf[!duplicated(region)]
+    mdf<-mdf[ avgLong>=input$longitude[1] & avgLong <=input$longitude[2] & avgLat>=input$lattitude[1] & avgLat <=input$lattitude[2] ]
+    mdf<-mdf[,list(region,Murder,Assault,UrbanPop,Rape,avgLong,avgLat)]
+    output$mdf<-renderDataTable(mdf, options = list(scrollX = TRUE))
+    #fluidRow(
+      box(dataTableOutput('mdf'), width = 8)
+    #, width=7)# end Row
+  })
+  #----------------------------------------END FILTERS----------------
 } # END SERVER
 
 # Run the application 
