@@ -229,20 +229,20 @@ server <- function(input, output, session) { # need session for interactive stuf
       
     }
     else({ # otherwise, render the page
-      cn<-colnames(v$mapData)
+      # calculate the max and min for each of the variables to create the input sliders dynamically
       long<-round(range(v$mapData$long))
       lat<-round(range(v$mapData$lat))
       murderRange<-range(v$mapData$Murder)
       assaultRange<-range(v$mapData$Assault)
       rapeRange<-range(v$mapData$Rape)
       popRange<-range(v$mapData$UrbanPop)
+      cn<-c('region', 'avgLong',  'avgLat', 'Murder', 'Assault', 'UrbanPop', 'Rape') # I'm setting these for the final, processed data table
       
       
-      #& Assault %in% input$assaultRate & Rape %in% input$rapeRate & UrbanPop %in% input$popRate
-     
+     # create a fluid UI
       fluidPage(
         fluidRow(
-          box(checkboxGroupInput('selectColumns',"Select Columns to Display", choices=cn, selected = cn ,inline=TRUE),
+          box(checkboxGroupInput('selectColumns',"Select Columns to Display", choices=cn, selected = cn ,inline=TRUE), # set up the checkbox for the final processed data table
                      title = NULL, footer = NULL, 
                      status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
                      solidHeader = FALSE, background = NULL, width = 12, height = NULL,
@@ -250,7 +250,7 @@ server <- function(input, output, session) { # need session for interactive stuf
                      ) # end Box
                  ), # end Row
         fluidRow(
-          box(
+          box( # box for all of the sliders
           sliderInput('longitude',"Longitude Range",min = long[1], max = long[2], value = (long)),
           sliderInput('lattitude',"Lattitude Range",min = lat[1], max = lat[2], value = (lat)),
           sliderInput('murderRate',"Murder Rate Range",min = murderRange[1], max = murderRange[2], value = (murderRange)),
@@ -262,25 +262,26 @@ server <- function(input, output, session) { # need session for interactive stuf
           solidHeader = FALSE, background = NULL, width = 4, height = NULL,
           collapsible = FALSE, collapsed = FALSE
         )# end Box
-        ,uiOutput('filterData')
+        ,uiOutput('filterData') # output the dynamic UI for the data table (next)
         )# end Row
         
       ) # end Page
     })
     
   })
-  output$filterData<-renderUI({
-    
+  output$filterData<-renderUI({ # generate the dynamic data table (this is removed from the previous section to keep from resetting the filters each time)
+    # find the elements in the data frame between the two ends of the sliders
     mdf<-v$mapData[Murder>=input$murderRate[1] & Murder <=input$murderRate[2] & Assault>=input$assaultRate[1] & Assault <=input$assaultRate[2] & Rape>=input$rapeRate[1] & Rape <=input$rapeRate[2] & UrbanPop>=input$popRate[1] & UrbanPop <=input$popRate[2] ]
-    mdf[,avgLong:=mean(long), by=region]
+    mdf[,avgLong:=mean(long), by=region] # average the boundary latlongs for the may for each state
     mdf[,avgLat:=mean(lat), by=region]
-    mdf<-mdf[!duplicated(region)]
+    mdf<-mdf[!duplicated(region)] # remove the duplicated states, then filter on the average Lat/Long
     mdf<-mdf[ avgLong>=input$longitude[1] & avgLong <=input$longitude[2] & avgLat>=input$lattitude[1] & avgLat <=input$lattitude[2] ]
-    mdf<-mdf[,list(region,Murder,Assault,UrbanPop,Rape,avgLong,avgLat)]
-    output$mdf<-renderDataTable(mdf, options = list(scrollX = TRUE))
-    #fluidRow(
-      box(dataTableOutput('mdf'), width = 8)
-    #, width=7)# end Row
+    mdf<-mdf[,list(region,Murder,Assault,UrbanPop,Rape,avgLong,avgLat)] # Select only the columns needed for the render
+    omdf<-dplyr::select(mdf,input$selectColumns) # select the columns chosen by the user dynamically
+    output$mdf<-renderDataTable(omdf, options = list(scrollX = TRUE)) # output the filtered table
+    
+      box(dataTableOutput('mdf'), width = 8) # render the UI
+    
   })
   #----------------------------------------END FILTERS----------------
 } # END SERVER
