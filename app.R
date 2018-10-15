@@ -56,7 +56,7 @@ ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab titl
                                     tabItem(tabName = 'dashboard',uiOutput('dtable'),width = 12),#end tab 1
                                     tabItem(tabName = 'second', uiOutput('continuousPlot'), width=12),#end tab 2
                                     tabItem(tabName = 'third', uiOutput('infoBoxes')),#end tab 3
-                                    tabItem(tabName = 'fourth',uiOutput('selections'),uiOutput('heatMap')),#end tab 4
+                                    tabItem(tabName = 'fourth',uiOutput('selections')),#end tab 4
                                     tabItem(tabName = 'fifth' ,uiOutput('filter') ) # end tab 5
                                   )#endtabs
                     ) # end Dashboard body
@@ -91,11 +91,14 @@ server <- function(input, output, session) { # need session for interactive stuf
     output$data<-renderDataTable(dt)
     
     # now create the UI - with "data" output
-    box(dataTableOutput('data') # add box details
-        ,title = NULL, footer = NULL, 
-        status = NULL,  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
-        solidHeader = FALSE, background = NULL, width = 6, height = NULL,
-        collapsible = FALSE, collapsed = FALSE)
+    fluidPage(
+      box(dataTableOutput('data') # add box details
+                  ,title = NULL, footer = NULL, 
+                  status = NULL,  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+                  solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+                  collapsible = FALSE, collapsed = FALSE)# end box
+      )# end page
+    
   }) # end data table UI
   #----------------------------END DATA TABLE STUFF---------------------------
   
@@ -180,12 +183,14 @@ server <- function(input, output, session) { # need session for interactive stuf
   # Create a section list and output it as a control
   output$selections<-renderUI({
     choices<-colnames(v$df)[c(2,3,5)] # dynamically assign the selections
-    fluidRow(
-      box(selectInput("select", "Select crime to display",choices = choices),
+    fluidPage(
+      box(selectInput("select", "Select crime to display",choices = choices),uiOutput('heatMap'),
           title = NULL, footer = NULL, 
           status = 'info',  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
-          solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+          solidHeader = FALSE, background = NULL, width = 12, height = NULL,
           collapsible = FALSE, collapsed = FALSE)
+      
+      
     )
     
   })
@@ -215,7 +220,7 @@ server <- function(input, output, session) { # need session for interactive stuf
       
     })
     fluidRow(
-    box(plotOutput('map'))
+    box(plotOutput('map', width = '100%', height='800px'), width = 12, height='900px')
     )
    
   })
