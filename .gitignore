@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 .DS_Store
+shinyDashboardTemplate.Rproj
+.gitignore
+.DS_Store
