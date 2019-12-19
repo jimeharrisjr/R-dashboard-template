@@ -88,14 +88,14 @@ server <- function(input, output, session) { # need session for interactive stuf
     v$rapeMean<-means[4]
     
     # output the data table to a reactive variable called "data"
-    output$data<-renderDataTable(dt)
+    output$data<-DT::renderDataTable(dt)
     
     # now create the UI - with "data" output
     fluidPage(
-      box(dataTableOutput('data') # add box details
+      box(DT::dataTableOutput('data') # add box details
                   ,title = NULL, footer = NULL, 
                   status = NULL,  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
-                  solidHeader = FALSE, background = NULL, width = 6, height = NULL,
+                  solidHeader = FALSE, background = NULL, width = 10, height = NULL,
                   collapsible = FALSE, collapsed = FALSE)# end box
       )# end page
     
@@ -283,9 +283,9 @@ server <- function(input, output, session) { # need session for interactive stuf
     mdf<-mdf[ avgLong>=input$longitude[1] & avgLong <=input$longitude[2] & avgLat>=input$lattitude[1] & avgLat <=input$lattitude[2] ]
     mdf<-mdf[,list(region,Murder,Assault,UrbanPop,Rape,avgLong,avgLat)] # Select only the columns needed for the render
     omdf<-dplyr::select(mdf,input$selectColumns) # select the columns chosen by the user dynamically
-    output$mdf<-renderDataTable(omdf, options = list(scrollX = TRUE)) # output the filtered table
+    output$mdf<-DT::renderDataTable(omdf, options = list(scrollX = TRUE)) # output the filtered table
     
-      box(dataTableOutput('mdf'), width = 8) # render the UI
+      box(DT::dataTableOutput('mdf'), width = 8) # render the UI
     
   })
   #----------------------------------------END FILTERS----------------
