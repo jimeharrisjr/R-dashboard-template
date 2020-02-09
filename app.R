@@ -12,6 +12,7 @@ library(ggmap)
 library(maps)
 library(mapdata)
 
+
 ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab title, skin default is blue, but there are also black, purple, green, red, and yellow. 
                     dashboardHeader(title=tags$a(href='https://www.google.com',tags$script(src = "message-handler.js"),
                                                    tags$img(src='Batman-PNG-Transparent.png', height='45px'))),
@@ -76,7 +77,16 @@ server <- function(input, output, session) { # need session for interactive stuf
   output$dtable<-renderUI({ # make a data table dynamically
     #use the USA arrests data for the data table and calculate some means
     data("USArrests")
-    dt<-USArrests
+    USArrests["Maryland", "UrbanPop"] # 67 -- the transcription error
+    dt <- USArrests
+    dt["Maryland", "UrbanPop"] <- 76.6
+    
+    ## also +/- 0.5 to restore the original  <n>.5  percentages
+    s5u <- c("Colorado", "Florida", "Mississippi", "Wyoming")
+    s5d <- c("Nebraska", "Pennsylvania")
+    dt[s5u, "UrbanPop"] <- dt[s5u, "UrbanPop"] + 0.5
+    dt[s5d, "UrbanPop"] <- dt[s5d, "UrbanPop"] - 0.5
+    
     means<-apply(dt[2:5,],2,mean)
     dt<-cbind(row.names(dt),dt)
     colnames(dt)[1]<-'region'
