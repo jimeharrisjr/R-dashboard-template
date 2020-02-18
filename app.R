@@ -208,8 +208,9 @@ server <- function(input, output, session) { # need session for interactive stuf
   output$heatMap<-renderUI({
     
     dt<-as.data.table(v$df)
+    dt<-setDT(dt)
     dt$region<-tolower(dt$region)
-    states <- as.data.table(map_data("state")) # get the map data for states
+    states <- as.data.table(ggplot2::map_data("state")) # get the map data for states
     
     map.df <-merge(states,dt,key='region')
     map.df <- map.df[order(map.df$order),]

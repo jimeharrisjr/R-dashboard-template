@@ -1,0 +1,12 @@
+name: R-dashboard-template
+title: R-dashboard-template
+username:
+account: twitanalysistool
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1825174
+bundleId: 2808016
+url: https://twitanalysistool.shinyapps.io/R-dashboard-template/
+when: 1581995723.07576
+asMultiple: FALSE
+asStatic: FALSE
