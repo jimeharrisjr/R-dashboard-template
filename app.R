@@ -11,7 +11,7 @@ library(ggplot2)
 library(ggmap)
 library(maps)
 library(mapdata)
-
+library(mapproj)
 
 ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab title, skin default is blue, but there are also black, purple, green, red, and yellow. 
                     dashboardHeader(title=tags$a(href='https://www.google.com',tags$script(src = "message-handler.js"),
@@ -207,13 +207,13 @@ server <- function(input, output, session) { # need session for interactive stuf
   # render a heatmap based on a selection in the control panel
   output$heatMap<-renderUI({
     
-    dt<-as.data.table(v$df)
+    dt<-v$df
     dt<-setDT(dt)
     dt$region<-tolower(dt$region)
     states <- as.data.table(ggplot2::map_data("state")) # get the map data for states
     
     map.df <-merge(states,dt,key='region')
-    map.df <- map.df[order(map.df$order),]
+    map.df <- map.df[order(map.df$order)]
     map.df[,Count:=group] # set an initial value for Count to avoid a warning
     if (!is.null(input$select)){ #avoid warnings by making sure the input has been recorded before setting the values of the column
       map.df$Count<-map.df[,input$select, with=FALSE]
@@ -221,14 +221,14 @@ server <- function(input, output, session) { # need session for interactive stuf
     v$mapData<-as.data.table(dplyr::select(map.df,-Count))
     
     output$map<-renderPlot({ # map a heatmap 
-      ggplot(map.df, aes(x=long,y=lat,group=group))+
+     gp<- ggplot(map.df, aes(x=long,y=lat,group=group))+
         ggtitle(paste(input$select,'by State')) +
         geom_polygon(aes(fill=Count))+
         geom_path()+ 
-        scale_fill_gradientn(colours=rev(heat.colors(100)),na.value="grey90")+
+        scale_fill_gradientn(colours=rev(heat.colors(100)),na.value="grey50")+
         coord_map() +
         theme(plot.title = element_text(color="red", size=32,hjust=.5,face="bold.italic"))
-      
+      print(gp)
     })
     fluidRow(
     box(plotOutput('map', width = '100%', height='800px'), width = 12, height='900px')

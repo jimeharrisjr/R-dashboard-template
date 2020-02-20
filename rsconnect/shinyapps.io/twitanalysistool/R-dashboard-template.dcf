@@ -5,8 +5,8 @@ account: twitanalysistool
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1825174
-bundleId: 2808016
+bundleId: 2813653
 url: https://twitanalysistool.shinyapps.io/R-dashboard-template/
-when: 1581995723.07576
+when: 1582162017.55346
 asMultiple: FALSE
 asStatic: FALSE
