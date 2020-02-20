@@ -2,6 +2,8 @@
 
 This is just a helpful (I hope) template to help build Shiny Dashboard apps. It's structured as a simple UI displaying dynamic UI elements generated in the server code. The code uses a built-in data set in R regarding crime rates in US states (USArrests), as well as map data in the ggplot2 library.
 
+You can see what it looks like on shiny.io here: https://twitanalysistool.shinyapps.io/R-dashboard-template/
+
 ### Usage
 
 The template contains examples on:
