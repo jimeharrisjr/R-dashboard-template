@@ -1,45 +1,21 @@
 ## app.R ##
-
-## 
 library(shiny)
 library(shinyFiles)
 library(shinydashboard)
 library(shinyWidgets)
-library(shinycssloaders)
 # Common packages I use
 library(dplyr)
 library(data.table)
-library(visNetwork)
-library(iptools)
-library(ipaddress)
 library(jsonlite)
 library(ggplot2)
 library(ggmap)
 library(maps)
 library(mapdata)
 library(mapproj)
-library(dashboardthemes)
-library(elastic)
-library(lubridate)
-library(digest)
-library(chorddiag)
-library(stringr)
-library(igraph)
-source('customTheme.R')
-con<<-elastic::connect(port=9200)
-source('functions.R')
-ui <- dashboardPage(title='Template', # This title sets the tab title, skin default is blue, but there are also black, purple, green, red, and yellow. 
-                    # dashboardHeader(title=tags$a(href='https://www.google.com',tags$script(src = "message-handler.js"),
-                    #                                tags$img(src='Batman-PNG-Transparent.png', height='45px'))),
-                    dashboardHeader(
-                      
-                      ### changing logo
-                      title = shinyDashboardLogo(
-                        theme = "purple_gradient",
-                        boldText = "NS-Edge",
-                        mainText = "Dashboard",
-                        badgeText = "v0.1"
-                      )),
+
+ui <- dashboardPage(title='Template',skin='blue', # This title sets the tab title, skin default is blue, but there are also black, purple, green, red, and yellow. 
+                    dashboardHeader(title=tags$a(href='https://www.google.com',tags$script(src = "message-handler.js"),
+                                                   tags$img(src='Batman-PNG-Transparent.png', height='45px'))),
                     # The Side Bar buts the menu on the left, and creates the spaces and links for the tabsNames
                     dashboardSidebar(sidebarMenu(
                       menuItem('Dashboard', tabName = "dashboard", icon = icon("dashboard")),
@@ -49,10 +25,7 @@ ui <- dashboardPage(title='Template', # This title sets the tab title, skin defa
                       menuItem('Fifth', tabName = "fifth", icon = icon("cog"))
                     ),width = '150px'),
                     # add some HTML tags, etc next, if desired
-                    dashboardBody( #shinyDashboardThemes(
-                     # theme = "blue_gradient"
-                      customTheme
-                    ,tags$head(tags$style(HTML(".btn-styled {
+                    dashboardBody(tags$head(tags$style(HTML(".btn-styled {
                                                             border: 0;
                                                             line-height: 2.5;
                                                             padding: 0 20px;
@@ -81,8 +54,8 @@ ui <- dashboardPage(title='Template', # This title sets the tab title, skin defa
                                                             ")),tags$script(src = "message-handler.js")),
                                   # Define your tab items - in this case, each tab calls out a custom UI rendered in the Server
                                   tabItems(
-                                    tabItem(tabName = 'dashboard',uiOutput('continuousPlot'),width = 12),#end tab 1
-                                    tabItem(tabName = 'second',uiOutput('dtable') , width=12),#end tab 2
+                                    tabItem(tabName = 'dashboard',uiOutput('dtable'),width = 12),#end tab 1
+                                    tabItem(tabName = 'second', uiOutput('continuousPlot'), width=12),#end tab 2
                                     tabItem(tabName = 'third', uiOutput('infoBoxes')),#end tab 3
                                     tabItem(tabName = 'fourth',uiOutput('selections')),#end tab 4
                                     tabItem(tabName = 'fifth' ,uiOutput('filter') ) # end tab 5
@@ -96,229 +69,90 @@ ui <- dashboardPage(title='Template', # This title sets the tab title, skin defa
 # SERVER STUFF IS NEXT
 
 server <- function(input, output, session) { # need session for interactive stuff
- # isa<-fread('./data/iana_special.csv')
-  mc<-fread('./data/mcast.csv')
-  macs<-fread('./data/macs.csv')
-  network_ip<-function(x){x<-ip_to_numeric(x);ipdb[x>=num_min & x <=num_max, network]}
-  country_ip<-function(x){x<-ip_to_numeric(x);ipdb[x>=num_min & x <=num_max, country_name]}
-  network_ip_special<-function(x){x<-ip_to_numeric(x);isa[x>=num_min & x <=num_max, address_block]}
-  name_ip_special<-function(x){x<-ip_to_numeric(x);isa[x>=num_min & x <=num_max, name]}
-  description_ip<-function(x){x<-ip_to_numeric(x);mc[x>=num_min & x <=num_max, Description]}
-  makeTitle<-function(x){if (length(x)==0){return(NA)} else {return(paste0('<p>',x,'</p>'))}}
-  remTitle<-function(x){x %>% str_remove_all('</*p>')}
+  
+  v <- reactiveValues(murderMean = NULL, assaultMean=NULL, rapeMean=NULL, mapData=NULL) # Reactive Values can be read and written to by any function
+  
+  
+  #----------------------------------------------STUFF FOR A DATA TABLE----------
+  output$dtable<-renderUI({ # make a data table dynamically
+    #use the USA arrests data for the data table and calculate some means
+    data("USArrests")
+    USArrests["Maryland", "UrbanPop"] # 67 -- the transcription error
+    dt <- USArrests
+    dt["Maryland", "UrbanPop"] <- 76.6
+    
+    ## also +/- 0.5 to restore the original  <n>.5  percentages
+    s5u <- c("Colorado", "Florida", "Mississippi", "Wyoming")
+    s5d <- c("Nebraska", "Pennsylvania")
+    dt[s5u, "UrbanPop"] <- dt[s5u, "UrbanPop"] + 0.5
+    dt[s5d, "UrbanPop"] <- dt[s5d, "UrbanPop"] - 0.5
+    
+    means<-apply(dt[2:5,],2,mean)
+    dt<-cbind(row.names(dt),dt)
+    colnames(dt)[1]<-'region'
+    v$df<-dt
+    #row.names(v$df)<-NULL
+    # set some reactive values for other functions
+    v$murderMean<-means[1]
+    v$assaultMean<-means[2]
+    v$rapeMean<-means[4]
+    
+    # output the data table to a reactive variable called "data"
+    output$data<-DT::renderDataTable(dt)
+    
+    # now create the UI - with "data" output
+    fluidPage(
+      box(DT::dataTableOutput('data') # add box details
+                  ,title = NULL, footer = NULL, 
+                  status = NULL,  # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
+                  solidHeader = FALSE, background = NULL, width = 10, height = NULL,
+                  collapsible = FALSE, collapsed = FALSE)# end box
+      )# end page
+    
+  }) # end data table UI
+  #----------------------------END DATA TABLE STUFF---------------------------
+  
+  
   
   # ---------------------------STUFF FOR THE CONTINUOUSLY UPDATING PLOT 
   # (Borrowing from Mike Wise's response https://stackoverflow.com/questions/41438725/update-dynamically-created-plot-in-r-shiny?answertab=votes#tab-top )
-  sensors<-get_mainindex(con)
-  sensors[,earliest:=ymd(earliest)]
-  youngest<-max(sensors$earliest)
-  #sensors[,table:=paste(table,str_extract(earliest,'^[0-9]+'), sep = '-'), by=table]
-  flowtable<-sensors[grepl('pcapflows',type),table]
-  t<-today()-days(0:5)
-  t<-t[t>=youngest]
-  flowtable<-paste(flowtable,t, sep='-')
-  dnstable<-sensors[grepl('DNS',type),table]
-  dnstable<-paste(dnstable,t, sep='-')
-  authtable<-sensors[grepl('auth',type),table]
-  authtable<-paste(authtable,t, sep='-')
-  rv <- reactiveValues(DNSdata=get_dns_all(con,dnstable),pcapinput=get_all_flows(con,flowtable),nodeData=data.table(),run=FALSE, selectedPcap=data.table()) # create reactive variables
+  rv <- reactiveValues(x=rnorm(1),run=FALSE) # create reactive variables
   
-
-  observeEvent(input$resetbutt,{ isolate({ rv$pcapinput<-get_all_flows(con,flowtable) }) })
-  
+  autoInvalidate <- reactiveTimer(intervalMs=500,session) # set an autoinvalidate timer
+  # trigger the reactive function with the timer
+  observe({
+    autoInvalidate()
+    isolate({ if (rv$run) { rv$x <- c(rv$x,rnorm(1)) } })
+  })
+  # observe the buttons and either start, stop, or reset the plots
+  observeEvent(input$gogobutt, { isolate({ rv$run=TRUE      }) })
+  observeEvent(input$stopbutt, { isolate({ rv$run=FALSE      }) })
+  observeEvent(input$resetbutt,{ isolate({ rv$x=rnorm(1) }) })
   
   #render the UI with the plot and call the UI comntinuousPlot
   output$continuousPlot<-renderUI({# output the UI generated below into the reactive object "continuousPlot"
-    output$networkplot <- renderVisNetwork({
-      pcapinput<-rv$pcapinput# create reactive plot in output 
-      lastdt<-max(pcapinput$lastseen)
-      sellayout<-input$layout
-      if (nrow(pcapinput)>0){
-        layers<-input$layerselect
-        #print(sellayout)
-        if ('')
-        # remote source hostname to local mac
-        edges<-pcapinput[localsrc==FALSE & localdst==TRUE,.(from=hostname_src,to=macdst, N, label=description)]
-        edges<-edges[,log(sum(N))+1, by=.(from,to,label)]
-        colnames(edges)[4]<-'weight'
-        nodes<-data.table(id=unique(edges$from), type='hostname')
-        nodes<-rbind(nodes,data.table(id=unique(edges$to), type='mac'))
-        # localhostsrc to local ipsrc
-        tmp<-pcapinput[localsrc==TRUE,.(from=hostname_src, to=ipsrc,N, label=description)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='hostname')) %>% unique()
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique()
-        edges<-rbind(edges,tmp)
-        #local ipsrc to local macsrc
-        tmp<-pcapinput[localsrc==TRUE,.(from=ipsrc, to=macsrc,N, label=protocol)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
-        edges<-rbind(edges,tmp)
-        # local macsrc to local macdst
-        tmp<-pcapinput[localsrc==TRUE & localdst==TRUE,.(from=macsrc, to=macdst,N, label='Ethernet')]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
-        edges<-rbind(edges,tmp)
-        # local macsrc to remote hostname
-        tmp<-pcapinput[localsrc==TRUE & localdst==FALSE,.(from=macsrc, to=hostname_dst,N, label=description)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
-        edges<-rbind(edges,tmp)
-        #local macdst to local ipdst
-        tmp<-pcapinput[ localdst==TRUE,.(from=macdst, to=ipdst,N, label=protocol)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique
-        edges<-rbind(edges,tmp)
-        # local ipdst to local hostnamedst
-        tmp<-pcapinput[localdst==TRUE,.(from=ipdst, to=hostname_dst,N, label=protocol)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
-        edges<-rbind(edges,tmp)
-        nodes[type=='ip',shape:='triangleDown']
-        nodes[type=='mac',shape:='ellipse']
-        nodes[type=='hostname',shape:='square']
-        net<-graph_from_data_frame(edges, directed = FALSE)
-        cfg<-cluster_fast_greedy(simplify(net))
-        membs<-membership(cfg)
-        nodes[, group:=membs[id]]
-        visNetwork(nodes=nodes, edges=edges, w='100%',h='85%') %>% visIgraphLayout(layout = sellayout) %>% visOptions(highlightNearest = TRUE)
-
-
-        #pcapinput %>% pcap_to_visNetwork(description = TRUE, type=input$layerselect) %>% get_fgclusters() %>% graph_vobj(glayout=sellayout,w="100%",h="90%")
-      }
-      
+    output$histplot <- renderPlot({ # create reactive plot in output 
+      htit <- sprintf("Hist of %d rnorms",length(rv$x))
+      hist(rv$x,col = "steelblue",main=htit,breaks=12)
     })
-    
-    output$selectTable<-DT::renderDataTable({
-      if (!is.null(input$current_node_selection) & nrow(rv$selectedPcap)>0){
-        return(rv$selectedPcap)
-      }
-    }, selection='multiple', options = list(scrollX = TRUE))
-    output$dynTable<-renderUI({
-      if (!is.null(input$current_node_selection) & nrow(rv$selectedPcap)>0){
-        box(DT::dataTableOutput('selectTable'), width = 9)
-        
-      }
-    })
-    output$digestBoxes<-renderUI({
-      if (!is.null(input$selectTable_rows_selected)){
-        rownums<-input$selectTable_rows_selected
-        digests<-rv$selectedPcap[rownums,digest] %>% unique()
-        print(digests)
-        # create a tag list
-        tl<-lapply(digests,function(x){mjournal$find(paste0('{"digest":"',x,'"}'))})#journalLookup(m=mjournal,digest=x)})
-        
-        p<-list()
-        for (i in 1:length(tl)){
-          a<-tl[[i]]
-          oldest<-min(a$datetime);print(oldest)
-          newest<-max(a$datetime); print(newest)
-          numOcc<-sum(a$N); print(numOcc)
-          p[[i]]<-box(title=a$digest[1],
-              fluidRow(infoBox(oldest,value='Oldest', width=12)),
-              fluidRow(infoBox(newest,value='Newest', width=12)),
-              fluidRow(infoBox(numOcc,value='Times Seen', width=12)), width=3
-              
-            )
-        }
-
-        tagList(p)
-      }
-      })
-    
-
-    output$chordd <- renderChorddiag({
-      #print(input$selectTable_rows_selected)
-      if (nrow(rv$pcapinput)>0 & nrow(rv$nodeData)>0){
-        pcapinput<-copy(rv$pcapinput)
-        ip<-input$current_node_selection
-        if (!is.null(ip)){
-          pcapinput<-pcapinput[layer_2_src==ip | layer_2_dst==ip | layer_1_src==ip | layer_1_dst==ip]
-          rv$selectedPcap<-pcapinput
-        }
-        #pcapinput[,port:=paste(layer_3_id,port)]
-        pc<-pcapinput[,.N, by=.(layer_2_src,layer_2_dst)] %>% unique()
-        
-        hn<-copy(rv$nodeData)
-        hn<-hn[id %in% pc$layer_2_src | id %in% pc$layer_2_dst]
-        hn[shape=='circle',title:=paste0(str_extract(id,'^[0-9]+.'),'x.x.x')]
-        hn<-hn[,.(id,title)]
-        hn[,title:=remTitle(title)]
-        #print(hn)
-        
-        if(input$resolvehn){
-          pc<-merge(pc,hn, by.x = 'layer_2_src', by.y = 'id', all.x = TRUE)
-          cn<-colnames(pc)
-          #print(pc)
-          cn[length(cn)]<-'srchost'
-          colnames(pc)<-cn
-          pc[is.na(srchost), srchost:=layer_2_src]
-          pc<-merge(pc,hn, by.x = 'layer_2_dst', by.y = 'id', all.x = TRUE)
-          cn<-colnames(pc)
-          cn[length(cn)]<-'dsthost'
-          colnames(pc)<-cn
-          pc[is.na(dsthost), dsthost:=layer_2_dst]
-          pc<-pc[,.N, by=.(srchost,dsthost)]
-         # print(pc)
-        }
-        colnames(pc)<-c('srchost','dsthost','N')
-        if (nrow(pc)<2){
-          pc2<-pc[,.(srchost=dsthost, dsthost=srchost, N)]
-          pc<-rbind(pc,pc2)
-        }
-        dat<-pc[,.(srchost,dsthost)]
-        ord1<-dat[,N:=.N, by=srchost][,.(name=srchost,N)] %>% unique
-        ord1<-rbind(ord1,unique(dat[,N:=.N, by=dsthost][,.(name=dsthost,N)]))
-        n<-max(ord1$N)+1; print(n)
-        colors<-colorRampPalette(c('blue','green','yellow','red'))(n)
-        ord1[,color:=colors[N]]
-        pc<-pc[order(N)]
-        pc<-dcast(pc, srchost~dsthost, value.var = 'N')
-        #print(pc)
-        m<-pc[,3:ncol(pc)]
-        m<-as.matrix(m)
-        
-        rownames(m)<-pc$srchost
-       groupnames<-c(rownames(m),colnames(m))
-       groupcolors<-groupnames %>% lapply(function(x){ord1[name==x,color]}) %>% unlist
-       
-        chorddiag(m,type='bipartite' ,groupColors = groupcolors, 
-                  showTicks = FALSE, groupnameFontsize = 11,groupPadding = 1,
-                  groupnamePadding = 10, margin=100)
-
-      }
+    output$valuePlot <-renderPlot({ # create a second reactive plot
+      plot(x=1:length(rv$x), y=rv$x,col = 'steelblue',main='Chaotic Neutral', type = 'b', pch=19)
     })
     # The below will create (render) the dynamic UI
     fluidRow( # create two plots in a fluid row
-      box(checkboxGroupInput('selectsensors','Select Which Sensors to Monitor',sensors$table,sensors$table, inline=TRUE), 
-          radioGroupButtons('layout','Layout',choiceNames=c('fr','kk','lgl','mds','star','sugiyama'),choiceValues=c('layout_with_fr','layout_with_kk','layout_with_lgl','layout_with_mds','layout_as_star','layout_with_sugiyama')), 
-          width = 12),
-      box(
-        checkboxGroupInput('layerselect','Layers',choices = c('DNS','MAC','Hostname'), selected = c('DNS','MAC','Hostname'), inline = TRUE),
-        visNetworkOutput("networkplot", height='800px') %>% withSpinner(), actionButton("resetbutt","Reset"),# Set Box Details
-        title = 'Network Diagram', footer = NULL, status = 'info',
-        solidHeader = TRUE, background = NULL, width = 12, height = '900px',
+      box(actionButton("gogobutt","Go"), # Put a histogram in one
+        actionButton("stopbutt","Stop"),
+        actionButton("resetbutt","Reset"),
+        plotOutput("histplot"), # Set Box Details
+        title = NULL, footer = NULL, status = NULL,
+        solidHeader = FALSE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE),
-      uiOutput('dynTable'),uiOutput('digestBoxes'),
     # create a second box with a different plot  
-    box(radioButtons('resolvehn','Resolve Hostnames?',choices = c(TRUE,FALSE), selected = TRUE, inline = TRUE),
-        chorddiagOutput('chordd', height='800px'), # put another plot in the other
-        title = "Chord View", footer = NULL, 
+    box(plotOutput('valuePlot'), # put another plot in the other
+        title = "Some Random Plot", footer = NULL, 
         status = 'info', # other valid status : primary Blue (sometimes dark blue) , success Green , info Blue , warning Orange , danger Red
-        solidHeader = TRUE, background = NULL, width = 12, height = '1000px',
+        solidHeader = TRUE, background = NULL, width = 6, height = NULL,
         collapsible = FALSE, collapsed = FALSE)
-    
     )
   }) # END RENDERUI
   #----------------------------------------END CONTINUOUS PLOT
