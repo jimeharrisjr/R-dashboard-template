@@ -38,12 +38,12 @@ ui <- dashboardPage(title='Template', # This title sets the tab title, skin defa
                         theme = "purple_gradient",
                         boldText = "NS-Edge",
                         mainText = "Dashboard",
-                        badgeText = "v0.1"
+                        badgeText = "v0.3"
                       )),
                     # The Side Bar buts the menu on the left, and creates the spaces and links for the tabsNames
                     dashboardSidebar(sidebarMenu(
                       menuItem('Dashboard', tabName = "dashboard", icon = icon("dashboard")),
-                      menuItem('Second', tabName = "second", icon = icon("tablet")),
+                      menuItem('DNS', tabName = "second", icon = icon("tablet")),
                       menuItem('Third', tabName = "third", icon = icon("bar-chart-o")),
                       menuItem('Fourth', tabName = "fourth", icon = icon("bar-chart-o")),
                       menuItem('Fifth', tabName = "fifth", icon = icon("cog"))
@@ -113,15 +113,22 @@ server <- function(input, output, session) { # need session for interactive stuf
   sensors[,earliest:=ymd(earliest)]
   youngest<-max(sensors$earliest)
   #sensors[,table:=paste(table,str_extract(earliest,'^[0-9]+'), sep = '-'), by=table]
-  flowtable<-sensors[grepl('pcapflows',type),table]
+  flowtable_base<-sensors[grepl('pcapflows',type),table]
   t<-today()-days(0:5)
   t<-t[t>=youngest]
-  flowtable<-paste(flowtable,t, sep='-')
+  flowtable<-paste(flowtable_base,t, sep='-')
   dnstable<-sensors[grepl('DNS',type),table]
   dnstable<-paste(dnstable,t, sep='-')
   authtable<-sensors[grepl('auth',type),table]
   authtable<-paste(authtable,t, sep='-')
-  rv <- reactiveValues(DNSdata=get_dns_all(con,dnstable),pcapinput=get_all_flows(con,flowtable),nodeData=data.table(),run=FALSE, selectedPcap=data.table()) # create reactive variables
+  dnsd<-get_dns_all(con,dnstable)
+  pcapi<-get_all_flows(con,flowtable)
+  while (nrow(pcapi)<1000){
+    t<-t-days(1)
+    flowtable<-paste(flowtable_base,t, sep='-')
+    pcapi<-get_all_flows(con,flowtable)
+  }
+  rv <- reactiveValues(DNSdata=dnsd,pcapinput=pcapi,nodeData=data.table(),run=FALSE, selectedPcap=data.table()) # create reactive variables
   
 
   observeEvent(input$resetbutt,{ isolate({ rv$pcapinput<-get_all_flows(con,flowtable) }) })
@@ -131,68 +138,157 @@ server <- function(input, output, session) { # need session for interactive stuf
   output$continuousPlot<-renderUI({# output the UI generated below into the reactive object "continuousPlot"
     output$networkplot <- renderVisNetwork({
       pcapinput<-rv$pcapinput# create reactive plot in output 
+      
+      #print(head(DNSdata))
       lastdt<-max(pcapinput$lastseen)
       sellayout<-input$layout
       if (nrow(pcapinput)>0){
+        DNSdata<-rv$DNSdata
+        DNSdata<-DNSdata[reply %in% pcapinput$ipdst | reply %in% pcapinput$ipsrc]
+        DNSdata[,domain:=str_remove(domain,'^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+\\.')]
+        DNSdata[,reply:=str_remove(reply,'[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+\\.')]
         layers<-input$layerselect
+       # print(layers)
         #print(sellayout)
-        if ('')
-        # remote source hostname to local mac
-        edges<-pcapinput[localsrc==FALSE & localdst==TRUE,.(from=hostname_src,to=macdst, N, label=description)]
-        edges<-edges[,log(sum(N))+1, by=.(from,to,label)]
-        colnames(edges)[4]<-'weight'
-        nodes<-data.table(id=unique(edges$from), type='hostname')
-        nodes<-rbind(nodes,data.table(id=unique(edges$to), type='mac'))
-        # localhostsrc to local ipsrc
-        tmp<-pcapinput[localsrc==TRUE,.(from=hostname_src, to=ipsrc,N, label=description)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='hostname')) %>% unique()
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique()
-        edges<-rbind(edges,tmp)
-        #local ipsrc to local macsrc
-        tmp<-pcapinput[localsrc==TRUE,.(from=ipsrc, to=macsrc,N, label=protocol)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
-        edges<-rbind(edges,tmp)
-        # local macsrc to local macdst
-        tmp<-pcapinput[localsrc==TRUE & localdst==TRUE,.(from=macsrc, to=macdst,N, label='Ethernet')]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
-        edges<-rbind(edges,tmp)
-        # local macsrc to remote hostname
-        tmp<-pcapinput[localsrc==TRUE & localdst==FALSE,.(from=macsrc, to=hostname_dst,N, label=description)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
-        edges<-rbind(edges,tmp)
-        #local macdst to local ipdst
-        tmp<-pcapinput[ localdst==TRUE,.(from=macdst, to=ipdst,N, label=protocol)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique
-        edges<-rbind(edges,tmp)
-        # local ipdst to local hostnamedst
-        tmp<-pcapinput[localdst==TRUE,.(from=ipdst, to=hostname_dst,N, label=protocol)]
-        tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
-        colnames(tmp)[4]<-'weight'
-        nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
-        nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
-        edges<-rbind(edges,tmp)
+        nodes<-data.table()
+        edges<-data.table()
+        #print(sellayout)
+        if ('Hostname' %in% layers){
+          if ('MAC' %in% layers){
+            # remote source hostname to local mac
+            tmp<-pcapinput[localsrc==FALSE & localdst==TRUE,.(from=hostname_src,to=macdst, N, label=description)]
+            tmp<-tmp[,log(sum(N))+1, by=.(from,to,label)]
+            colnames(tmp)[4]<-'weight'
+            nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='hostname'))
+            nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac'))
+            edges<-rbind(edges,tmp)
+            # local macsrc to remote hostname
+            tmp<-pcapinput[localsrc==TRUE & localdst==FALSE,.(from=macsrc, to=hostname_dst,N, label=description)]
+            tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+            colnames(tmp)[4]<-'weight'
+            nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
+            nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
+            edges<-rbind(edges,tmp)
+          } else {
+            # remote source hostname to local ip
+            tmp<-pcapinput[localsrc==FALSE & localdst==TRUE,.(from=hostname_src,to=ipdst, N, label=protocol)]
+            tmp<-tmp[,log(sum(N))+1, by=.(from,to,label)]
+            colnames(tmp)[4]<-'weight'
+            nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='hostname'))
+            nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip'))
+            edges<-rbind(edges,tmp)
+            # local ipsrc to remote hostname
+            tmp<-pcapinput[localsrc==TRUE & localdst==FALSE,.(from=ipsrc, to=hostname_dst,N, label=protocol)]
+            tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+            colnames(tmp)[4]<-'weight'
+            nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
+            nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
+            edges<-rbind(edges,tmp)
+            # local ipdst to local hostnamedst
+            tmp<-pcapinput[localdst==TRUE,.(from=ipdst, to=hostname_dst,N, label=protocol)]
+            tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+            colnames(tmp)[4]<-'weight'
+            nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
+            nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='hostname')) %>% unique
+            edges<-rbind(edges,tmp)
+          }
+          # localhostsrc to local ipsrc
+          tmp<-pcapinput[localsrc==TRUE,.(from=hostname_src, to=ipsrc,N, label=protocol)]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='hostname')) %>% unique()
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique()
+          edges<-rbind(edges,tmp)
+        }
+        
+        if ("MAC" %in% layers){
+          #local macsrc to local macsrc
+          tmp<-pcapinput[localsrc==TRUE,.(from=ipsrc, to=macsrc,N, label=protocol)]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
+          edges<-rbind(edges,tmp)
+          #remote ipsrc to local macsrc
+          tmp<-pcapinput[localsrc==FALSE & localdst==TRUE,.(from=ipsrc, to=macsrc,N, label=protocol)]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
+          edges<-rbind(edges,tmp)
+          
+          # local macsrc to local macdst
+          tmp<-pcapinput[localsrc==TRUE & localdst==TRUE,.(from=macsrc, to=macdst,N, label='Ethernet')]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='mac')) %>% unique
+          edges<-rbind(edges,tmp)
+          
+          #local macdst to local ipdst
+          tmp<-pcapinput[localdst==TRUE,.(from=macdst, to=ipdst,N, label=protocol)]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique
+          edges<-rbind(edges,tmp)
+          #local macsrc to remote ipdst
+          tmp<-pcapinput[ localsrc==TRUE  & ipdst %in% DNSdata$reply,.(from=macsrc, to=ipdst,N, label=protocol)]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='mac')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique
+          edges<-rbind(edges,tmp)
+        } else {
+          #IPsrc to ipdst
+          tmp<-pcapinput[ ,.(from=ipsrc, to=ipdst,N, label=protocol)]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='ip')) %>% unique
+          edges<-rbind(edges,tmp)
+        }
+        if ('DNS' %in% layers){
+          
+          # tmp<-DNSdata[reply=='',.(from=ipsrc, to=domain,N, label='DNS')]
+          # tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          # #print(tmp)
+          # colnames(tmp)[4]<-'weight'
+          # nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='domain')) %>% unique
+          # nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='domain')) %>% unique
+          # edges<-rbind(edges,tmp)
+          
+          tmp<-DNSdata[reply!='',.(from=reply, to=domain,N, label='DNS Reply')]
+          tmp<-tmp[,log(sum(N)+1), by=.(from,to,label)]
+          colnames(tmp)[4]<-'weight'
+         # print(tmp)
+          nodes<-rbind(nodes,data.table(id=unique(tmp$from), type='ip')) %>% unique
+          nodes<-rbind(nodes,data.table(id=unique(tmp$to), type='domain')) %>% unique
+          edges<-rbind(edges,tmp)
+          
+        }
+        #nodes[type=='domain' & id %in% nodes[type=='ip',id], type:='ip']
+        nodes[type=='hostname' & id %in% nodes[type=='domain',id], type:='domain']
+        nodes[type=='hostname' & id %in% nodes[type=='ip',id], type:='ip']
+        edges<-unique(edges)
+        nodes<-unique(nodes)
+        nodes[,N:=.N, by=id]
+        print(nodes[N>1][order(id)])
+       nodes[,N:=NULL]
+        
         nodes[type=='ip',shape:='triangleDown']
         nodes[type=='mac',shape:='ellipse']
         nodes[type=='hostname',shape:='square']
+        nodes[type=='domain',shape:='star']
         net<-graph_from_data_frame(edges, directed = FALSE)
         cfg<-cluster_fast_greedy(simplify(net))
         membs<-membership(cfg)
         nodes[, group:=membs[id]]
-        visNetwork(nodes=nodes, edges=edges, w='100%',h='85%') %>% visIgraphLayout(layout = sellayout) %>% visOptions(highlightNearest = TRUE)
+        rv$nodeData<-nodes
+        visNetwork(nodes=nodes, edges=edges, w='100%',h='85%') %>% visIgraphLayout(layout = sellayout) %>% visEvents(select = "function(nodes) {
+                Shiny.onInputChange('current_node_selection', nodes.nodes);
+                ;}")%>% 
+        visOptions(highlightNearest = TRUE) 
 
 
         #pcapinput %>% pcap_to_visNetwork(description = TRUE, type=input$layerselect) %>% get_fgclusters() %>% graph_vobj(glayout=sellayout,w="100%",h="90%")
@@ -214,17 +310,17 @@ server <- function(input, output, session) { # need session for interactive stuf
     output$digestBoxes<-renderUI({
       if (!is.null(input$selectTable_rows_selected)){
         rownums<-input$selectTable_rows_selected
-        digests<-rv$selectedPcap[rownums,digest] %>% unique()
-        print(digests)
+       # digests<-rv$selectedPcap[rownums,digest] %>% unique()
+        #print(digests)
         # create a tag list
-        tl<-lapply(digests,function(x){mjournal$find(paste0('{"digest":"',x,'"}'))})#journalLookup(m=mjournal,digest=x)})
+       # tl<-lapply(digests,function(x){mjournal$find(paste0('{"digest":"',x,'"}'))})#journalLookup(m=mjournal,digest=x)})
         
         p<-list()
-        for (i in 1:length(tl)){
+        for (i in 1:1){#length(tl)){
           a<-tl[[i]]
-          oldest<-min(a$datetime);print(oldest)
-          newest<-max(a$datetime); print(newest)
-          numOcc<-sum(a$N); print(numOcc)
+          oldest<-min(a$datetime);#print(oldest)
+          newest<-max(a$datetime); #print(newest)
+          numOcc<-sum(a$N);# print(numOcc)
           p[[i]]<-box(title=a$digest[1],
               fluidRow(infoBox(oldest,value='Oldest', width=12)),
               fluidRow(infoBox(newest,value='Newest', width=12)),
@@ -239,36 +335,38 @@ server <- function(input, output, session) { # need session for interactive stuf
     
 
     output$chordd <- renderChorddiag({
+      ip<-input$current_node_selection
+      print(paste('ip',ip))
       #print(input$selectTable_rows_selected)
-      if (nrow(rv$pcapinput)>0 & nrow(rv$nodeData)>0){
+      if (nrow(rv$pcapinput)>0 & nrow(rv$nodeData)>0 & !is.null(ip)){
         pcapinput<-copy(rv$pcapinput)
-        ip<-input$current_node_selection
+        print (head(pcapinput))
         if (!is.null(ip)){
-          pcapinput<-pcapinput[layer_2_src==ip | layer_2_dst==ip | layer_1_src==ip | layer_1_dst==ip]
+          pcapinput<-pcapinput[ipsrc==ip | ipdst==ip | macsrc==ip | macdst==ip|hostname_dst==ip|hostname_src==ip]
           rv$selectedPcap<-pcapinput
         }
         #pcapinput[,port:=paste(layer_3_id,port)]
-        pc<-pcapinput[,.N, by=.(layer_2_src,layer_2_dst)] %>% unique()
+        pc<-pcapinput[,.N, by=.(ipsrc,ipdst)] %>% unique()
         
         hn<-copy(rv$nodeData)
-        hn<-hn[id %in% pc$layer_2_src | id %in% pc$layer_2_dst]
+        hn<-hn[id %in% pc$ipsrc | id %in% pc$ipdst]
         hn[shape=='circle',title:=paste0(str_extract(id,'^[0-9]+.'),'x.x.x')]
         hn<-hn[,.(id,title)]
         hn[,title:=remTitle(title)]
         #print(hn)
         
         if(input$resolvehn){
-          pc<-merge(pc,hn, by.x = 'layer_2_src', by.y = 'id', all.x = TRUE)
+          pc<-merge(pc,hn, by.x = 'ipsrc', by.y = 'id', all.x = TRUE)
           cn<-colnames(pc)
           #print(pc)
           cn[length(cn)]<-'srchost'
           colnames(pc)<-cn
-          pc[is.na(srchost), srchost:=layer_2_src]
-          pc<-merge(pc,hn, by.x = 'layer_2_dst', by.y = 'id', all.x = TRUE)
+          pc[is.na(srchost), srchost:=ipsrc]
+          pc<-merge(pc,hn, by.x = 'ipdst', by.y = 'id', all.x = TRUE)
           cn<-colnames(pc)
           cn[length(cn)]<-'dsthost'
           colnames(pc)<-cn
-          pc[is.na(dsthost), dsthost:=layer_2_dst]
+          pc[is.na(dsthost), dsthost:=ipdst]
           pc<-pc[,.N, by=.(srchost,dsthost)]
          # print(pc)
         }
@@ -302,13 +400,13 @@ server <- function(input, output, session) { # need session for interactive stuf
     # The below will create (render) the dynamic UI
     fluidRow( # create two plots in a fluid row
       box(checkboxGroupInput('selectsensors','Select Which Sensors to Monitor',sensors$table,sensors$table, inline=TRUE), 
-          radioGroupButtons('layout','Layout',choiceNames=c('fr','kk','lgl','mds','star','sugiyama'),choiceValues=c('layout_with_fr','layout_with_kk','layout_with_lgl','layout_with_mds','layout_as_star','layout_with_sugiyama')), 
+          radioGroupButtons('layout','Layout',choiceNames=c('kk','fr','lgl','mds','star','sugiyama'),choiceValues=c('layout_with_kk','layout_with_fr','layout_with_lgl','layout_with_mds','layout_as_star','layout_with_sugiyama')), 
           width = 12),
       box(
         checkboxGroupInput('layerselect','Layers',choices = c('DNS','MAC','Hostname'), selected = c('DNS','MAC','Hostname'), inline = TRUE),
         visNetworkOutput("networkplot", height='800px') %>% withSpinner(), actionButton("resetbutt","Reset"),# Set Box Details
         title = 'Network Diagram', footer = NULL, status = 'info',
-        solidHeader = TRUE, background = NULL, width = 12, height = '900px',
+        solidHeader = TRUE, background = NULL, width = 12, height = '1000px',
         collapsible = FALSE, collapsed = FALSE),
       uiOutput('dynTable'),uiOutput('digestBoxes'),
     # create a second box with a different plot  
